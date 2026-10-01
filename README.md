@@ -19,6 +19,8 @@ This is the radio backend [Omdrop](https://github.com/netmojo-systems/omdrop-plu
 
 ## Install
 
+### Arch Linux / Omarchy M
+
 ```bash
 git clone https://github.com/netmojo-systems/omdrop-awdl.git
 cd omdrop-awdl
@@ -46,6 +48,17 @@ On a kernel whose own `brcmfmac` already has this AWDL support, DKMS skips the b
 
 - **0009, the `awdl_trace` fix** ([#213](https://github.com/aurora-silicon/linux/pull/213)): windows open with transmit and receive unproven, so a radio that has stopped transmitting isn't caught before the window opens. Receive is still confirmed once data frames arrive.
 - **0010–0014, instrumentation:** the firmware RAM snapshot (`brcm_iovar.py awdl-if fwdump`), and the action-frame forwarding that `awdl-resolve` and `airdrop-send.py --af-log` read.
+
+### NixOS
+
+The repository also exports a NixOS module and Nix packages. Add
+`omdrop-awdl.nixosModules.default` to your system's modules and enable
+`services.omdrop-awdl.enable`. The driver builds against your selected kernel;
+keep your existing Asahi kernel and firmware configuration. DKMS is not used.
+
+See [the NixOS guide](docs/nixos.md) for flake setup, commands, configuration,
+and packaging checks. Boot creates `awdl0` without opening a discoverability
+window. Receiving still requires a separate AirDrop receiver.
 
 ## What the package installs
 
