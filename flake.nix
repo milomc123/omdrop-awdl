@@ -54,6 +54,20 @@
           inherit (self.packages.${system}) userspace;
         in
         {
+          patch-series = pkgs.stdenvNoCC.mkDerivation {
+            pname = "omdrop-awdl-patch-check";
+            version = import ./nix/version.nix;
+            src = ./kernel;
+            patches = import ./nix/patches.nix { lib = nixpkgs.lib; };
+            dontConfigure = true;
+            dontBuild = true;
+            installPhase = ''
+              grep -q 'module_param_named(awdl_trace' \
+                drivers/net/wireless/broadcom/brcm80211/brcmfmac/common.c
+              mkdir -p "$out"
+              cp PROVENANCE.md "$out/"
+            '';
+          };
           nixos-module = import ./nix/check-module.nix {
             inherit pkgs userspace;
             lib = nixpkgs.lib;
@@ -78,6 +92,35 @@
                 env -i ${userspace}/libexec/omdrop/ble-airdrop-adv.py --help >/dev/null
                 env -i ${userspace}/bin/omdrop-discoverable status --json > status.json
                 python3 -c 'import json; assert json.load(open("status.json"))["visible"] is False'
+                env -i ${userspace}/libexec/omdrop/radio/probe --json > probe.json
+                python3 -c 'import json; assert json.load(open("probe.json"))["version"] == "${import ./nix/version.nix}"'
+                # A hook must load its sibling library under pkexec's empty PATH.
+                # Missing arguments fail before root checks or radio operations.
+                set +e
+                env -i ${userspace}/libexec/omdrop/radio/read > hook.out 2>&1
+                hook_status=$?
+                set -e
+                test "$hook_status" -eq 2
+                grep -q 'usage:' hook.out
+                ! grep -q 'cannot read' hook.out
+                # Exercise root's directory-repair path as the build user,
+                # under the exact PATH exported by the installed helper.
+                # run_dir intentionally treats its caller as the owner.
+                helper_path=$(sed -n 's/^export PATH=//p' ${userspace}/bin/omdrop-discoverable)
+                env -i PATH="$helper_path" bash -c '
+                  set -euo pipefail
+                  . ${userspace}/libexec/omdrop/omdrop-broadcom.sh
+                  RUN="$PWD/run-dir-test"
+                  LOG="$RUN/log"
+                  mkdir -m 777 "$RUN"
+                  touch "$RUN/untrusted"
+                  chmod 666 "$RUN/untrusted"
+                  ln -s /nonexistent "$RUN/link"
+                  need_run_dir
+                  test ! -e "$RUN/untrusted"
+                  test ! -L "$RUN/link"
+                  test "$(stat -c %a "$RUN")" = 755
+                '
                 grep -F '${userspace}/libexec/omdrop/omdrop-discoverable' \
                   ${userspace}/share/polkit-1/actions/org.omarchy.omdrop.policy
                 python3 -c 'import libarchive, PIL, zeroconf, ifaddr, dbus; from gi.repository import GLib'
@@ -90,17 +133,28 @@
                   userspace.python
                   pkgs.bash
                   pkgs.openssl
+                  pkgs.util-linux
                 ];
               }
               ''
                 cp -r ${./userspace} userspace
                 cp -r ${./tests} tests
+                cp -r ${./packaging} packaging
+                cp ${./PKGBUILD} PKGBUILD
+                cp ${./dkms.conf.in} dkms.conf.in
+                cp ${./README.md} README.md
                 chmod -R u+w userspace tests
                 patchShebangs userspace
                 # This test writes an executable shell fixture at runtime, after
                 # patchShebangs has run. Nix builders do not provide /usr/bin/env.
-                substituteInPlace tests/test_supervisor_lifecycle.py \
+                substituteInPlace tests/test_supervisor_lifecycle.py tests/test_radio_hooks.py \
                   --replace-fail '#!/usr/bin/env bash' '#!${pkgs.bash}/bin/bash'
+                substituteInPlace tests/test_radio_hooks.py \
+                  --replace-fail '#!/usr/bin/env python3' '#!${userspace.python}/bin/python3'
+                substituteInPlace tests/test_dkms_conf.py \
+                  --replace-fail '#!/bin/bash' '#!${pkgs.bash}/bin/bash'
+                substituteInPlace tests/test_core_coexistence.py \
+                  --replace-fail '/usr/bin/sleep' '${pkgs.coreutils.override { singleBinary = false; }}/bin/sleep'
                 python3 -m unittest discover -s tests -q
                 touch "$out"
               '';

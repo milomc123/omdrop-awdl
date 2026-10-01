@@ -5,6 +5,7 @@
   bash,
   python3,
   coreutils,
+  findutils,
   gnugrep,
   gnused,
   gawk,
@@ -36,6 +37,7 @@ let
     bash
     python
     coreutils
+    findutils
     gnugrep
     gnused
     gawk
@@ -68,21 +70,26 @@ stdenvNoCC.mkDerivation {
     runHook preInstall
     libexec="$out/libexec/omdrop"
     mkdir -p "$libexec" "$out/bin" "$out/share/polkit-1/actions"
-    cp *.py awdl-up omdrop-discoverable send-to-peer awdl-resolve "$libexec/"
+    cp *.py omdrop-broadcom.sh awdl-up omdrop-discoverable send-to-peer awdl-resolve "$libexec/"
+    cp -r radio "$libexec/"
     chmod 755 "$libexec/awdl-up" "$libexec/omdrop-discoverable"
     patchShebangs "$libexec"
     substituteInPlace "$libexec/omdrop-discoverable" "$libexec/awdl-peer-watch.py" \
       --replace-fail /usr/lib/omdrop "$libexec"
+    substituteInPlace "$libexec/radio/probe" \
+      --replace-fail '@VERSION@' '${import ./version.nix}'
 
     # Keep the original script names: the discoverability supervisor compares
     # its exact argv against SELF, and Python helpers execute sibling .py files.
     # A fixed PATH also applies after pkexec sanitises the caller's environment.
-    for script in awdl-up omdrop-discoverable; do
+    for script in awdl-up omdrop-discoverable radio/*; do
       substituteInPlace "$libexec/$script" --replace-fail \
         'set -uo pipefail' \
         'set -uo pipefail
     export PATH=${runtimePath}
     export OMDROP_MANAGE_NM_CONFIG=0'
+    done
+    for script in awdl-up omdrop-discoverable; do
       ln -s "$libexec/$script" "$out/bin/$script"
     done
 
