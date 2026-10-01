@@ -205,7 +205,9 @@ RELOAD=0
 # link-local, which voids every address the peers target. The package ships the
 # vendor copy; this only writes /etc when neither file is present, so a removed
 # or edited setting is not silently reinstated.
-if [[ ! -f $NMCONF && ! -f $NMCONF_VENDOR ]]; then
+# Declarative distributions supply this setting themselves. They can disable
+# the fallback without changing how the Arch package repairs a missing file.
+if [[ ${OMDROP_MANAGE_NM_CONFIG:-1} == 1 && ! -f $NMCONF && ! -f $NMCONF_VENDOR ]]; then
   printf '[keyfile]\nunmanaged-devices=interface-name:awdl0\n' > "$NMCONF"
   log "wrote $NMCONF"
 fi
