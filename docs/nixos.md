@@ -52,6 +52,10 @@ The first build may also build the selected kernel if its development outputs
 are missing from your binary caches. Subsequent AWDL changes reuse those kernel
 outputs and compile only the replacement driver.
 
+A full kernel build needs substantial temporary disk space. If its development
+outputs are not cached and the build runs out of space, the AWDL package cannot
+compile until that dependency can be built or obtained from a trusted cache.
+
 Nix installs the driver under `updates/omdrop-awdl/`, alongside the stock kernel
 modules. A failed driver build prevents installation of the new generation;
 your previous generation remains available. This differs from DKMS's automatic
@@ -155,7 +159,19 @@ On `x86_64-linux`, `nix flake check` builds the userspace package and runs the
 existing unit tests and NixOS module checks. The hardware driver output and its
 module-selection check are available on `aarch64-linux` only.
 
-Checks exercise installed tools with an empty environment, Python dependencies,
+To validate packaging without building a kernel, select the independent checks
+explicitly (replace the system name when building on x86):
+
+```bash
+nix build --no-link \
+  .#checks.aarch64-linux.patch-series \
+  .#checks.aarch64-linux.userspace \
+  .#checks.aarch64-linux.unit-tests \
+  .#checks.aarch64-linux.nixos-module
+```
+
+Checks apply the shared patch series to the vendored sources and exercise
+installed tools with an empty environment, Python dependencies,
 the policy's executable path, module configuration, and the existing identity
 and supervisor tests. The driver check combines stock and replacement modules,
 then verifies that `modinfo` and `modprobe` select the AWDL modules.

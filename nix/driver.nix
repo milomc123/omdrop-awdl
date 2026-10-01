@@ -5,17 +5,13 @@
 }:
 
 let
-  patchDir = ../patches;
-  patchNames = builtins.filter (name: lib.hasSuffix ".patch" name) (
-    builtins.attrNames (builtins.readDir patchDir)
-  );
   driverDir = "drivers/net/wireless/broadcom/brcm80211";
 in
 stdenv.mkDerivation {
   pname = "brcmfmac-awdl";
   version = "${import ./version.nix}-${kernel.modDirVersion}";
   src = ../kernel;
-  patches = map (name: patchDir + "/${name}") patchNames;
+  patches = import ./patches.nix { inherit lib; };
 
   nativeBuildInputs = kernel.moduleBuildDependencies;
   hardeningDisable = [ "pic" ];

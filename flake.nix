@@ -54,6 +54,20 @@
           inherit (self.packages.${system}) userspace;
         in
         {
+          patch-series = pkgs.stdenvNoCC.mkDerivation {
+            pname = "omdrop-awdl-patch-check";
+            version = import ./nix/version.nix;
+            src = ./kernel;
+            patches = import ./nix/patches.nix { lib = nixpkgs.lib; };
+            dontConfigure = true;
+            dontBuild = true;
+            installPhase = ''
+              grep -q 'module_param_named(awdl_trace' \
+                drivers/net/wireless/broadcom/brcm80211/brcmfmac/common.c
+              mkdir -p "$out"
+              cp PROVENANCE.md "$out/"
+            '';
+          };
           nixos-module = import ./nix/check-module.nix {
             inherit pkgs userspace;
             lib = nixpkgs.lib;
