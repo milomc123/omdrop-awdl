@@ -22,14 +22,16 @@
 }:
 
 let
-  python = python3.withPackages (ps: with ps; [
-    libarchive-c
-    pillow
-    zeroconf
-    ifaddr
-    dbus-python
-    pygobject3
-  ]);
+  python = python3.withPackages (
+    ps: with ps; [
+      libarchive-c
+      pillow
+      zeroconf
+      ifaddr
+      dbus-python
+      pygobject3
+    ]
+  );
   runtimePath = lib.makeBinPath [
     bash
     python
@@ -54,8 +56,13 @@ stdenvNoCC.mkDerivation {
   pname = "omdrop-awdl-userspace";
   version = import ./version.nix;
   src = ../userspace;
-  nativeBuildInputs = [ makeWrapper bash python ];
+  nativeBuildInputs = [
+    makeWrapper
+    bash
+    python
+  ];
   dontBuild = true;
+  passthru.python = python;
 
   installPhase = ''
     runHook preInstall
@@ -64,6 +71,8 @@ stdenvNoCC.mkDerivation {
     cp *.py awdl-up omdrop-discoverable send-to-peer awdl-resolve "$libexec/"
     chmod 755 "$libexec/awdl-up" "$libexec/omdrop-discoverable"
     patchShebangs "$libexec"
+    substituteInPlace "$libexec/omdrop-discoverable" "$libexec/awdl-peer-watch.py" \
+      --replace-fail /usr/lib/omdrop "$libexec"
 
     # Keep the original script names: the discoverability supervisor compares
     # its exact argv against SELF, and Python helpers execute sibling .py files.

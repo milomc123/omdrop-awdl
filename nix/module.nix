@@ -71,9 +71,12 @@ in
     ];
 
     environment.systemPackages = [ cfg.package ];
-    environment.etc = lib.mapAttrs' (name: value: lib.nameValuePair "omdrop/${name}" {
-      text = "${toString value}\n";
-    }) cfg.settings;
+    environment.etc = lib.mapAttrs' (
+      name: value:
+      lib.nameValuePair "omdrop/${name}" {
+        text = "${toString value}\n";
+      }
+    ) cfg.settings;
 
     boot.extraModulePackages = lib.mkIf cfg.driver.enable [ cfg.driver.package ];
     boot.kernelModules = [ "brcmfmac" ];
