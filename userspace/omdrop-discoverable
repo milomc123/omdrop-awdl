@@ -186,7 +186,9 @@ supervise(){
   spawn mdns python3 "$LIB/awdl-mdns-respond.py" --iface "$IF" --port 8771 --flags "$ADV_FLAGS"
   # Peer registration is what makes our SYN-ACKs leave the radio: unicast to a
   # MAC with no firmware peer entry completes 0x0003 FW_TOSSED (074311Z).
-  spawn peers python3 "$LIB/awdl-peer-watch.py" --iface "$IF" --only ""
+  local protected
+  protected=$(cat "$RUN/protected-peers" 2>/dev/null || true)
+  spawn peers python3 "$LIB/awdl-peer-watch.py" --iface "$IF" --only "" --protect "$protected"
   if [[ -e $CONF/ble-wake ]]; then
     # Opt-in: a Mac publishes _airdrop._tcp 1.13 s after a sender's BLE advert,
     # so this helps the iPhone path -- but it advertises us as a SENDER and it
@@ -368,12 +370,32 @@ wait_supervisors_gone(){
 }
 
 # --- commands ---------------------------------------------------------------
+protected_selection(){
+  python3 - "$1" <<'PY'
+import re, sys
+items = sys.argv[1].split(',')
+if not 1 <= len(items) <= 8 or any(
+    not re.fullmatch(r'(?:[0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}', item)
+    or int(item[:2], 16) & 1 or int(item.replace(':', ''), 16) == 0
+    for item in items
+):
+    sys.exit(2)
+print(','.join(sorted(set(item.lower() for item in items))))
+PY
+}
+
 cmd_start(){
-  local secs=${1:-}
+  local secs=${1:-} protected= selected=0 current=
   # 0 is a window with no expiry, which is what the panel's "Until I turn it
   # off" asks for. Rejecting it made that setting fail with a usage string in
   # the panel: omdrop passes ${secs:-0}, so every unbounded press sent a 0.
   is_duration "$secs" || die 2 "usage: $0 start <seconds> (0 = until stopped, at most 999999999)"
+  if (( $# > 1 )); then
+    [[ $# == 3 && $2 == --protect ]] || die 2 "usage: start <seconds> [--protect MAC[,MAC...]]"
+    protected=$(protected_selection "$3") || die 2 "--protect requires one to eight unicast MACs"
+    selected=1
+    (( secs >= 1 && secs <= 600 )) || die 2 "protected windows require 1..600 seconds"
+  fi
   need_root start "$secs"
   mkdir -p "$RUN"
   # One start at a time. `supervisor_alive` only catches a window that is
@@ -400,6 +422,13 @@ cmd_start(){
   fi
 
   if supervisor_alive; then
+    current=$(cat "$RUN/protected-peers" 2>/dev/null || true)
+    if (( selected )) && [[ $protected != "$current" ]]; then
+      die 2 "stop the current window before changing protected peers"
+    fi
+    if [[ -n $current ]]; then
+      (( secs >= 1 && secs <= 600 )) || die 2 "protected windows require 1..600 seconds"
+    fi
     # A live supervisor reads $RUN/until every interval, so rewriting it is how
     # a second press changes the deadline -- including to 0, "no expiry".
     if (( secs > 0 )); then
@@ -418,6 +447,12 @@ cmd_start(){
   radio_up
 
   write_identity
+
+  if (( selected )); then
+    printf '%s\n' "$protected" > "$RUN/protected-peers"
+  else
+    rm -f "$RUN/protected-peers"
+  fi
 
   # 0 in, 0 through: an unbounded window has no deadline to write, and the
   # supervisor and status both read the sentinel rather than a date.
@@ -576,11 +611,13 @@ cmd_status(){
 # program's `<path> __supervise`, which made it look like that program's
 # supervisor (security review, RADIO-ARGV-PAIR-ANYWHERE).
 usage(){
-  printf 'usage: %s start <seconds> | stop | status [--json] | peers | diag [seconds] | read <iovar> [len] | trace [on|off]\n' "$0" >&2
+  printf 'usage: %s start <seconds> [--protect MAC[,MAC...]] | stop | status [--json] | peers | diag [seconds] | read <iovar> [len] | trace [on|off]\n' "$0" >&2
   exit 2
 }
 case "${1:-}" in
-  start)  (( $# <= 2 )) || usage; shift; cmd_start "$@" ;;
+  start)
+    if (( $# > 2 )); then [[ $# == 4 && $3 == --protect ]] || usage; fi
+    shift; cmd_start "$@" ;;
   stop)   (( $# == 1 )) || usage; cmd_stop ;;
   status) (( $# <= 2 )) || usage; shift; cmd_status "$@" ;;
   peers)  (( $# == 1 )) || usage; cmd_peers ;;
