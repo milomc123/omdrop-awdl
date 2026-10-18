@@ -18,7 +18,7 @@ body:
         Run this in a terminal and paste the whole output:
 
         ```bash
-        { tr -d '\0' < /proc/device-tree/model; echo; lspci -nn | grep -i network; uname -r; pacman -Q brcmfmac-awdl-dkms; omdrop --version; journalctl -k -b | grep -m1 'brcmfmac.*Firmware:'; ip -br link show awdl0; } 2>&1
+        { { tr -d '\0' < /proc/device-tree/model && echo; } 2>/dev/null || cat /sys/class/dmi/id/product_name; lspci -nn | grep -i network; uname -r; pacman -Q brcmfmac-awdl-dkms; omdrop --version; journalctl -k -b | grep -m1 'brcmfmac.*Firmware:'; ip -br link show awdl0; } 2>&1
         ```
       render: text
     validations:

@@ -19,7 +19,7 @@ The firmware's behaviour differs by chip and firmware version, and reviewers can
 Paste the whole output of this command, the same one the hardware-report issue form asks for:
 
 ```bash
-{ tr -d '\0' < /proc/device-tree/model; echo; lspci -nn | grep -i network; uname -r; pacman -Q brcmfmac-awdl-dkms; omdrop --version; journalctl -k -b | grep -m1 'brcmfmac.*Firmware:'; ip -br link show awdl0; } 2>&1
+{ { tr -d '\0' < /proc/device-tree/model && echo; } 2>/dev/null || cat /sys/class/dmi/id/product_name; lspci -nn | grep -i network; uname -r; pacman -Q brcmfmac-awdl-dkms; omdrop --version; journalctl -k -b | grep -m1 'brcmfmac.*Firmware:'; ip -br link show awdl0; } 2>&1
 ```
 
 Also give each Apple device involved, with its model, OS version, and AirDrop visibility (Everyone or Contacts Only).
