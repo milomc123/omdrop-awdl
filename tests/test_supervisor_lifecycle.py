@@ -45,8 +45,17 @@ class SupervisorLifecycleTests(unittest.TestCase):
 
     def run_fragment(self, body, supervisor_uid=os.getuid()):
         uid_line = "" if supervisor_uid is None else f"SUPERVISOR_UID={supervisor_uid}\n"
-        harness = f'''\nset -uo pipefail\nRUN={self.run}\nSELF={self.helper}\n{uid_line}# The workstation's grep replacement cannot search /proc/*/cmdline. The\n# lifecycle must not depend on grep accepting binary procfs files.\ngrep(){{ return 1; }}\n{self.lifecycle_fragment()}\n{body}\n'''
+        harness = f'''\nset -uo pipefail\nRUN={self.run}\nSELF={self.helper}\n{uid_line}# The workstation's grep replacement cannot search /proc/*/cmdline. The\n# lifecycle must not depend on grep accepting binary procfs files.\ngrep(){{ return 1; }}\n{self.lifecycle_fragment()}\n# Not the real omdrop-radio: a live omdrop-core window on the machine running\n# these tests would otherwise count as a supervisor of the test window.\nCORE_RADIO={self.root}/no-omdrop-core\n{body}\n'''
         return subprocess.run(["bash", "-c", harness], capture_output=True, text=True)
+
+    def test_the_harness_never_matches_the_real_omdrop_core(self):
+        # wait_supervisors_gone and window_supervisors also look for core's
+        # supervisor, by its installed path. With a window open on the test
+        # machine, that real root process held stop-related tests for 10 s.
+        result = self.run_fragment('printf %s "$CORE_RADIO"')
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(result.stdout.startswith(str(self.root)), result.stdout)
 
     def test_recorded_supervisor_is_recognized_without_grep(self):
         supervisor = self.spawn("__supervise", "0", "0")
